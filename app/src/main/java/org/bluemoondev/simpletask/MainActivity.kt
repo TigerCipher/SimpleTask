@@ -208,7 +208,7 @@ fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val checkedState = remember { mutableStateOf(false) }
+        val checkedState = remember { mutableStateOf(taskState.value.isCompleted) }
         Checkbox(
             checked = checkedState.value,
             onCheckedChange = { isChecked ->
