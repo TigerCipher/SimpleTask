@@ -20,14 +20,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -39,17 +47,33 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.bluemoondev.simpletask.ui.theme.SimpleTaskTheme
+import kotlin.random.Random
 
-data class Task(val id: Int, val name: String, var isCompleted: Boolean)
+data class Task(val id: Int, val name: String, val description: String, val deadline: String, var isCompleted: Boolean)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            val isDialogOpen = remember { mutableStateOf(false) }
+            val tasks = remember { mutableStateOf(listOf<Task>()) }
             SimpleTaskTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    AddItemButton(onClick = { onAddTask() })
+                    Box(modifier = Modifier.fillMaxSize()){
+                        TaskList(tasks = tasks.value, onTaskComplete = { /*TODO*/ }, onTaskDelete = { /*TODO*/ }, onTaskEdit = { /*TODO*/ })
+                        FloatingActionButton(
+                            onClick = { isDialogOpen.value = true },
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(16.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add task")
+                        }
+                        AddTaskDialog(isDialogOpen){
+                            task -> tasks.value = tasks.value + task
+                        }
+                    }
                 }
             }
         }
@@ -60,17 +84,47 @@ private fun onAddTask(){
     // TODO
 }
 
+
 @Composable
-fun AddItemButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box (modifier = Modifier.fillMaxSize()) {
-        FloatingActionButton(
-            onClick = onClick,
-            modifier = modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        ) {
-            Icon(Icons.Default.Add, contentDescription = "Add task")
-        }
+fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (Task) -> Unit) {
+    if (isDialogOpen.value) {
+        AlertDialog(
+            onDismissRequest = { isDialogOpen.value = false },
+            title = { Text(text = "Add New Task") },
+            text = {
+                Column {
+                    var name by remember { mutableStateOf("") }
+                    var description by remember { mutableStateOf("") }
+                    var deadline by remember { mutableStateOf("") }
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Task Name") }
+                    )
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Task Description") }
+                    )
+                    OutlinedTextField(
+                        value = deadline,
+                        onValueChange = { deadline = it },
+                        label = { Text("Task Deadline") }
+                    )
+
+                    Button(
+                        onClick = {
+                            onTaskAdd(Task(id = Random.nextInt(), name = name, description = description, deadline = deadline, isCompleted = false))
+                            isDialogOpen.value = false
+                        }
+                    ) {
+                        Text("Add Task")
+                    }
+                }
+            },
+            confirmButton = { }
+        )
     }
 }
 
@@ -130,9 +184,9 @@ fun TaskList(tasks: List<Task>, onTaskComplete: (Task) -> Unit, onTaskDelete: (I
 @Composable
 fun TaskListPreview() {
     val tasks = listOf(
-        Task(id = 1, name = "Task 1", isCompleted = false),
-        Task(id = 2, name = "Task 2", isCompleted = true),
-        Task(id = 3, name = "Task 3", isCompleted = false)
+        Task(id = 1, name = "Task 1", description = "Description 1", deadline = "Deadline 1", isCompleted = false),
+        Task(id = 1, name = "Task 2", description = "Description 2", deadline = "Deadline 2", isCompleted = true),
+        Task(id = 1, name = "Task 3", description = "Description 3", deadline = "Deadline 3", isCompleted = false),
     )
 
     TaskList(
