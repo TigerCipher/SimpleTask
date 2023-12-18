@@ -1,9 +1,12 @@
 package org.bluemoondev.simpletask
 
+import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -34,7 +37,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,24 +54,79 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.asLiveData
+import androidx.lifecycle.viewModelScope
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Delete
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import org.bluemoondev.simpletask.ui.theme.SimpleTaskTheme
 import kotlin.random.Random
 
-data class Task(val id: Int, val name: String, val description: String, val deadline: String, var isCompleted: Boolean)
+
+class TaskViewModel(application: Application) : AndroidViewModel(application) {
+//    private val db = TaskDatabase.getDatabase(application)
+
+    fun insertTask(task: Task, application: Application) {
+        viewModelScope.launch {
+            TaskDatabase.getDatabase(application).taskDao().insertTask(task)
+        }
+    }
+
+    fun updateTask(task: Task, application: Application) {
+        viewModelScope.launch {
+            TaskDatabase.getDatabase(application).taskDao().updateTask(task)
+        }
+    }
+
+    fun getTasks(application: Application): LiveData<List<Task>> {
+        try{
+            Log.d("TaskViewModel", "Getting tasks as live data")
+            return TaskDatabase.getDatabase(application).taskDao().getAllTasks().asLiveData()
+        } catch (e: Exception) {
+            Log.d("TaskViewModel", "Failed to get tasks as live data")
+            Log.e("TaskViewModel", "Error: ${e.message}")
+        }
+        Log.d("TaskViewModel", "Returning list that will probably crash")
+//        return db.taskDao().getAllTasks().asLiveData()
+        return MutableLiveData<List<Task>>()
+    }
+}
 
 class MainActivity : ComponentActivity() {
+    private val taskViewModel: TaskViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d("MainActivity", "onCreate")
         setContent {
             val isDialogOpen = remember { mutableStateOf(false) }
-            val tasks = remember { mutableStateListOf<MutableState<Task>>() }
             SimpleTaskTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Box(modifier = Modifier.fillMaxSize()){
-                        TaskList(tasks = tasks, onTaskDelete = {
+                        Log.d("MainActivity", "Box")
+                        val tasks by taskViewModel.getTasks(application).observeAsState(emptyList())
+                        Log.d("MainActivity", "Post task creation")
+                        val taskStates = tasks.map { remember { mutableStateOf(it) } }
+                        TaskList(tasks = taskStates, onTaskDelete = {
                            Log.d("MainActivity", "Task deleted")
-                        }, onTaskEdit = { /*TODO*/ })
+                        }, onTaskEdit = { /*TODO*/ },
+                            onTaskCompleted = {
+                                taskViewModel.updateTask(taskStates[it].value, application)
+                            })
                         FloatingActionButton(
                             onClick = { isDialogOpen.value = true },
                             modifier = Modifier
@@ -76,7 +136,7 @@ class MainActivity : ComponentActivity() {
                             Icon(Icons.Default.Add, contentDescription = "Add task")
                         }
                         AddTaskDialog(isDialogOpen){
-                            task -> tasks.add(task)
+                            task -> taskViewModel.insertTask(task.value, application)
                         }
                     }
                 }
@@ -118,7 +178,7 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
 
                     Button(
                         onClick = {
-                            onTaskAdd(mutableStateOf(Task(id = Random.nextInt(), name = name, description = description, deadline = deadline, isCompleted = false)))
+                            onTaskAdd(mutableStateOf(Task(name = name, description = description, deadline = deadline, isCompleted = false)))
                             isDialogOpen.value = false
                         }
                     ) {
@@ -132,7 +192,7 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
 }
 
 @Composable
-fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit: () -> Unit) {
+fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit: () -> Unit, onTaskCompleted: () -> Unit) {
     val task = taskState.value
     Row(
         modifier = Modifier
@@ -155,6 +215,7 @@ fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit
                 Log.d("TaskItem", "Checkbox clicked: $isChecked - ${task.isCompleted}")
                 taskState.value.isCompleted = isChecked
                 checkedState.value = !checkedState.value
+                onTaskCompleted()
             }
         )
         Text(
@@ -176,16 +237,18 @@ fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit
 }
 
 @Composable
-fun TaskList(tasks: MutableList<MutableState<Task>>, onTaskDelete: (Int) -> Unit, onTaskEdit: (Int) -> Unit) {
+fun TaskList(tasks: List<State<Task>>, onTaskDelete: (Int) -> Unit, onTaskEdit: (Int) -> Unit, onTaskCompleted: (Int) -> Unit) {
     LazyColumn {
         itemsIndexed(tasks) { index, task ->
+            val mutableTask = remember { mutableStateOf(task.value) }
             TaskItem(
-                taskState = task,
+                taskState = mutableTask,
                 onTaskDelete = {
                                onTaskDelete(index)
 //                    tasks.value = tasks.value.filterNot { it == task }
                 },
-                onTaskEdit = { onTaskEdit(index) }
+                onTaskEdit = { onTaskEdit(index) },
+                onTaskCompleted = { onTaskCompleted(index) }
             )
         }
     }
