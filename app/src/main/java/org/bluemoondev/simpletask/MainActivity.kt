@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -194,7 +195,7 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
                     var minute by remember { mutableIntStateOf(0) }
                     val isDatePickerOpen = remember { mutableStateOf(false) }
                     val timeState = rememberTimePickerState()
-                    val dateFormatter = remember { SimpleDateFormat("dd/MM/yyy", Locale.getDefault())}
+                    val dateFormatter = remember { SimpleDateFormat("MM/dd/yyy", Locale.getDefault())}
 
                     OutlinedTextField(
                         value = name,
@@ -254,19 +255,33 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
 }
 
 @Composable
+fun TaskDetailsDialog(task: Task, isDialogOpen: MutableState<Boolean>){
+    if (isDialogOpen.value) {
+        AlertDialog(
+            onDismissRequest = { isDialogOpen.value = false },
+            title = { Text(text = task.name) },
+            text = {
+                Column {
+                    Text(text = task.description)
+                    val deadlineDate = Date(task.deadline)
+                    val dateFormatter = remember { SimpleDateFormat("MM/dd/yyy", Locale.getDefault())}
+//                    val timeFormatter = remember { SimpleDateFormat("HH:mm", Locale.getDefault())}
+                    Text(text = "Deadline: ${dateFormatter.format(deadlineDate)} at ${task.hour}:${task.minute}")
+                }
+            },
+            confirmButton = { }
+        )
+    }
+}
+
+@Composable
 fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit: () -> Unit, onTaskCompleted: () -> Unit) {
     val task = taskState.value
+    val isDialogOpen = remember { mutableStateOf(false)}
     Row(
         modifier = Modifier
             .fillMaxWidth()
-//            .draggable(
-//                state = rememberDraggableState { delta ->
-//                    if (delta > 0) onTaskEdit() // If dragged to the right
-//                    else if (delta < 0) onTaskDelete() // If dragged to the left
-//                },
-//                orientation = Orientation.Horizontal,
-//                startDragImmediately = true
-//            )
+            .clickable(onClick = { isDialogOpen.value = true })
             .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -293,6 +308,8 @@ fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit
         IconButton(onClick = { onTaskEdit() }) {
             Icon(Icons.Default.Edit, contentDescription = "Edit task")
         }
+
+        TaskDetailsDialog(task = task, isDialogOpen = isDialogOpen)
     }
 }
 
