@@ -236,17 +236,21 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
 
                     SelectDateDialog(isDialogOpen = isDatePickerOpen, onDateSelect = { deadline = it})
 
-
-                    Button(
-                        onClick = {
-                            onTaskAdd(mutableStateOf(Task(name = name, description = description,
-                                deadline = deadline, hour = hour, minute = minute,
-                                isCompleted = false)))
-                            isDialogOpen.value = false
+                    if(name.isEmpty() || deadline == 0L){
+                        Text(text = "Please fill out all required fields", color = Color.Red)
+                    } else {
+                        Button(
+                            onClick = {
+                                onTaskAdd(mutableStateOf(Task(name = name, description = description,
+                                    deadline = deadline, hour = hour, minute = minute,
+                                    isCompleted = false)))
+                                isDialogOpen.value = false
+                            }
+                        ) {
+                            Text("Add Task")
                         }
-                    ) {
-                        Text("Add Task")
                     }
+
                 }
             },
             confirmButton = { }
