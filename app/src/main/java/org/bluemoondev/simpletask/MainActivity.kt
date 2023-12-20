@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,11 +37,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TimeInput
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,6 +81,9 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.bluemoondev.simpletask.ui.theme.SimpleTaskTheme
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.random.Random
 
 
@@ -145,12 +155,33 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SelectDateDialog(isDialogOpen: MutableState<Boolean>, onDateSelect: (Long) -> Unit) {
+    if (isDialogOpen.value) {
+        val dateState = rememberDatePickerState()
+        AlertDialog(
+            onDismissRequest = { isDialogOpen.value = false},
+            title =  { Text(text = "Select Date") },
+            text = {
+                DatePicker(state = dateState)
+                onDateSelect(dateState.selectedDateMillis ?: 0L)
+            },
+            confirmButton = {
+                Button(onClick = {
+                    isDialogOpen.value = false
+                }) {
+                    Text("Select")
+                }
+            }
+        )
+    }
+}
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<Task>) -> Unit) {
     if (isDialogOpen.value) {
-        Log.d("AddTaskDialog", "Dialog opened")
         AlertDialog(
             onDismissRequest = { isDialogOpen.value = false },
             title = { Text(text = "Add New Task") },
@@ -158,27 +189,58 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
                 Column {
                     var name by remember { mutableStateOf("") }
                     var description by remember { mutableStateOf("") }
-                    var deadline by remember { mutableStateOf("") }
+                    var deadline by remember { mutableLongStateOf(0L) }
+                    var hour by remember { mutableIntStateOf(0) }
+                    var minute by remember { mutableIntStateOf(0) }
+                    val isDatePickerOpen = remember { mutableStateOf(false) }
+                    val timeState = rememberTimePickerState()
+                    val dateFormatter = remember { SimpleDateFormat("dd/MM/yyy", Locale.getDefault())}
 
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Task Name") }
+                        label = { Text("Name*") }
                     )
                     OutlinedTextField(
                         value = description,
                         onValueChange = { description = it },
-                        label = { Text("Task Description") }
+                        label = { Text("Description") }
                     )
-                    OutlinedTextField(
-                        value = deadline,
-                        onValueChange = { deadline = it },
-                        label = { Text("Task Deadline") }
-                    )
+                    Text(text = "Deadline")
+                    TimeInput(state = timeState)
+                    hour = timeState.hour
+                    minute = timeState.minute
+
+                    Row {
+                        Button(
+                            onClick = {
+                                isDatePickerOpen.value = true
+                            }
+                        ) {
+                            Text("Select Date*")
+                        }
+
+                        Text(
+                            text = if (deadline == 0L) "No deadline selected" else dateFormatter.format(
+                                Date(deadline)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 8.dp),
+                            textAlign = TextAlign.Center,
+                            fontSize = 16.sp
+                        )
+                    }
+
+
+                    SelectDateDialog(isDialogOpen = isDatePickerOpen, onDateSelect = { deadline = it})
+
 
                     Button(
                         onClick = {
-                            onTaskAdd(mutableStateOf(Task(name = name, description = description, deadline = deadline, isCompleted = false)))
+                            onTaskAdd(mutableStateOf(Task(name = name, description = description,
+                                deadline = deadline, hour = hour, minute = minute,
+                                isCompleted = false)))
                             isDialogOpen.value = false
                         }
                     ) {
@@ -212,7 +274,6 @@ fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit
         Checkbox(
             checked = checkedState.value,
             onCheckedChange = { isChecked ->
-                Log.d("TaskItem", "Checkbox clicked: $isChecked - ${task.isCompleted}")
                 taskState.value.isCompleted = isChecked
                 checkedState.value = !checkedState.value
                 onTaskCompleted()
@@ -225,7 +286,6 @@ fun TaskItem(taskState: MutableState<Task>, onTaskDelete: () -> Unit, onTaskEdit
                 .padding(start = 8.dp)
         )
         IconButton(onClick = {
-            Log.d("TaskItem", "Delete button clicked")
             onTaskDelete()
         }) {
             Icon(Icons.Default.Delete, contentDescription = "Delete task")
