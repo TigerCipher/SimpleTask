@@ -1,12 +1,21 @@
 package org.bluemoondev.simpletask
 
+import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -62,6 +71,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -83,14 +95,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.bluemoondev.simpletask.ui.theme.SimpleTaskTheme
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.random.Random
 
 
 class TaskViewModel(application: Application) : AndroidViewModel(application) {
-//    private val db = TaskDatabase.getDatabase(application)
-
     fun insertTask(task: Task, application: Application) {
         viewModelScope.launch {
             TaskDatabase.getDatabase(application).taskDao().insertTask(task)
@@ -104,36 +115,102 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun getTasks(application: Application): LiveData<List<Task>> {
-        try{
-            Log.d("TaskViewModel", "Getting tasks as live data")
-            return TaskDatabase.getDatabase(application).taskDao().getAllTasks().asLiveData()
-        } catch (e: Exception) {
-            Log.d("TaskViewModel", "Failed to get tasks as live data")
-            Log.e("TaskViewModel", "Error: ${e.message}")
-        }
-        Log.d("TaskViewModel", "Returning list that will probably crash")
-//        return db.taskDao().getAllTasks().asLiveData()
-        return MutableLiveData<List<Task>>()
+        return TaskDatabase.getDatabase(application).taskDao().getAllTasks().asLiveData()
     }
+
+//    fun getIncompleteTaskCount(application: Application): LiveData<Int> {
+//        return TaskDatabase.getDatabase(application).taskDao().getIncompleteTaskCount().asLiveData()
+//    }
+//
+//    fun getIncompleteTasks(application: Application): LiveData<List<Task>> {
+//        return TaskDatabase.getDatabase(application).taskDao().getIncompleteTasks().asLiveData()
+//    }
+}
+
+class App {
+    companion object {
+        @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+        var PERMISSIONS = arrayOf(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+        )
+
+        fun hasPermissions(context: Context, permissions: Array<String>): Boolean = permissions.all {
+            ActivityCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+
+        fun hasPermission(context: Context, permission: String): Boolean {
+            return ActivityCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+
+
 }
 
 class MainActivity : ComponentActivity() {
     private val taskViewModel: TaskViewModel by viewModels()
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.d("MainActivity", "onCreate")
+
+        val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            android.Manifest.permission.POST_NOTIFICATIONS
+        } else {
+            TODO("VERSION.SDK_INT < TIRAMISU")
+        }
+        if(ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED){
+            val requestPermsLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { isGranted ->
+                if(isGranted){
+                    Log.d("PERMISSION", "Granted")
+                } else {
+                    Log.d("PERMISSION", "Denied")
+                }
+            }
+//            requestPermissions(arrayOf(perm), 0)
+            requestPermsLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        if(App.hasPermissions(application, App.PERMISSIONS)){
+            Log.d("PERMISSION", "Has permissions")
+        } else {
+            Log.d("PERMISSION", "Does not have permissions")
+        }
+
+        val calendar = Calendar.getInstance().apply { timeInMillis = System.currentTimeMillis()
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, TaskNotificationReceiver::class.java)
+        intent.putExtra("type", "daily")
+        val uniqueId = System.currentTimeMillis().toInt()
+        val pendingIntent = PendingIntent.getBroadcast(this, uniqueId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, AlarmManager.INTERVAL_DAY, pendingIntent)
+
+//        if(alarmManager.canScheduleExactAlarms()){
+//            Log.d("ALARM", "Can schedule exact alarms")
+//            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+//        } else {
+//            alarmManager.setExact(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, pendingIntent)
+//            alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, AlarmManager.INTERVAL_DAY, pendingIntent)
+//        }
+
+        val timeRemaining = calendar.timeInMillis - System.currentTimeMillis()
+        Log.d("ALARM", "Time remaining: ${timeRemaining / 1000 / 60 / 60 / 24} days, ${timeRemaining / 1000 / 60 / 60 % 24} hours, ${timeRemaining / 1000 / 60 % 60} minutes, ${timeRemaining / 1000 % 60} seconds")
+//        sendBroadcast(intent)
+//        setupHourlyNotifications()
+
         setContent {
             val isDialogOpen = remember { mutableStateOf(false) }
             SimpleTaskTheme {
                 // A surface container using the 'background' color from the theme
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Box(modifier = Modifier.fillMaxSize()){
-                        Log.d("MainActivity", "Box")
                         val tasks by taskViewModel.getTasks(application).observeAsState(emptyList())
-                        Log.d("MainActivity", "Post task creation")
                         val taskStates = tasks.map { remember { mutableStateOf(it) } }
                         TaskList(tasks = taskStates, onTaskDelete = {
-                           Log.d("MainActivity", "Task deleted")
                         }, onTaskEdit = { /*TODO*/ },
                             onTaskCompleted = {
                                 taskViewModel.updateTask(taskStates[it].value, application)
@@ -149,11 +226,53 @@ class MainActivity : ComponentActivity() {
                         AddTaskDialog(isDialogOpen){
                             task -> taskViewModel.insertTask(task.value, application)
                         }
+
+                        Button(
+                            onClick = { sendTestNotification() },
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(16.dp)
+                        ) {
+                            Text("Send Test Notification")
+                        }
                     }
                 }
             }
         }
     }
+
+    private fun sendTestNotification() {
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notificationChannelId = "test_channel"
+        val channel = NotificationChannel(notificationChannelId, "Test Notifications", NotificationManager.IMPORTANCE_DEFAULT)
+        notificationManager.createNotificationChannel(channel)
+        val notification = NotificationCompat.Builder(this, notificationChannelId)
+            .setContentTitle("Test Notification")
+            .setContentText("This is a test notification.")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .build()
+        notificationManager.notify(0, notification)
+    }
+
+    private fun setupHourlyNotifications() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, TaskNotificationReceiver::class.java)
+        intent.putExtra("type", "hourly")
+        val uniqueId = System.currentTimeMillis().toInt() + Random.nextInt(5, 100)
+        val pendingIntent = PendingIntent.getBroadcast(this, uniqueId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+        }
+
+        alarmManager.setInexactRepeating(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            AlarmManager.INTERVAL_HOUR,
+            pendingIntent
+        )
+    }
+
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

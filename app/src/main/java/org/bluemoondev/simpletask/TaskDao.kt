@@ -13,6 +13,12 @@ interface TaskDao {
     @Query("SELECT * FROM tasks")
     fun getAllTasks(): Flow<List<Task>>
 
+    @Query("SELECT COUNT(*) FROM tasks WHERE isCompleted = 0")
+    fun getIncompleteTaskCount(): Int
+
+    @Query("SELECT * FROM tasks WHERE isCompleted = 0")
+    fun getIncompleteTasks(): List<Task>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: Task)
 

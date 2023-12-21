@@ -10,7 +10,7 @@ android {
 
     defaultConfig {
         applicationId = "org.bluemoondev.simpletask"
-        minSdk = 24
+        minSdk = 31
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -74,4 +74,7 @@ dependencies {
 
     implementation("androidx.lifecycle:lifecycle-livedata-ktx:2.6.2")
     implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
+
+    implementation("com.google.accompanist:accompanist-permissions:0.31.1-alpha")
+    
 }
