@@ -9,9 +9,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.icu.text.TimeZoneFormat
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.CalendarView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -91,6 +94,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import com.ozcanalasalvar.datepicker.compose.datepicker.WheelDatePicker
+import com.ozcanalasalvar.datepicker.compose.timepicker.WheelTimePicker
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import org.bluemoondev.simpletask.ui.theme.SimpleTaskTheme
@@ -178,15 +183,18 @@ class MainActivity : ComponentActivity() {
         }
 
         val calendar = Calendar.getInstance().apply { timeInMillis = System.currentTimeMillis()
-            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.HOUR_OF_DAY, 14)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
         }
+        if(calendar.timeInMillis < System.currentTimeMillis()){
+            calendar.add(Calendar.DAY_OF_MONTH, 1)
+        }
+
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(this, TaskNotificationReceiver::class.java)
         intent.putExtra("type", "daily")
-        val uniqueId = System.currentTimeMillis().toInt()
-        val pendingIntent = PendingIntent.getBroadcast(this, uniqueId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pendingIntent = PendingIntent.getBroadcast(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         alarmManager.setInexactRepeating(AlarmManager.RTC_WAKEUP, calendar.timeInMillis, AlarmManager.INTERVAL_DAY, pendingIntent)
 
 //        if(alarmManager.canScheduleExactAlarms()){
@@ -284,7 +292,9 @@ fun SelectDateDialog(isDialogOpen: MutableState<Boolean>, onDateSelect: (Long) -
             onDismissRequest = { isDialogOpen.value = false},
             title =  { Text(text = "Select Date") },
             text = {
-                DatePicker(state = dateState)
+                DatePicker(
+                    state = dateState
+                    )
                 onDateSelect(dateState.selectedDateMillis ?: 0L)
             },
             confirmButton = {
@@ -330,32 +340,29 @@ fun AddTaskDialog(isDialogOpen: MutableState<Boolean>, onTaskAdd: (MutableState<
                     TimeInput(state = timeState)
                     hour = timeState.hour
                     minute = timeState.minute
+//                    WheelTimePicker(
+//                        offset = 1,
+//                        onTimeChanged = { h, m, _ -> hour = h; minute = m; }
+//
+//                    )
+                    val d = com.ozcanalasalvar.datepicker.model.Date()
+                    val c = Calendar.getInstance()
+                    val year = c.get(Calendar.YEAR)
+                    val month = c.get(Calendar.MONTH)
+                    val day = c.get(Calendar.DAY_OF_MONTH)
+                    d.day = day
+                    d.month = month
+                    d.year = year
 
-                    Row {
-                        Button(
-                            onClick = {
-                                isDatePickerOpen.value = true
-                            }
-                        ) {
-                            Text("Select Date*")
-                        }
+                    WheelDatePicker(
+                        offset = 2,
+                        yearsRange = IntRange(year, year + 5),
+                        startDate = d,
+                        onDateChanged = {_, _, _, date -> deadline = date }
+                    )
+//                    SelectDateDialog(isDialogOpen = isDatePickerOpen, onDateSelect = { deadline = it})
 
-                        Text(
-                            text = if (deadline == 0L) "No deadline selected" else dateFormatter.format(
-                                Date(deadline)
-                            ),
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 8.dp),
-                            textAlign = TextAlign.Center,
-                            fontSize = 16.sp
-                        )
-                    }
-
-
-                    SelectDateDialog(isDialogOpen = isDatePickerOpen, onDateSelect = { deadline = it})
-
-                    if(name.isEmpty() || deadline == 0L){
+                    if(name.isEmpty()){
                         Text(text = "Please fill out all required fields", color = Color.Red)
                     } else {
                         Button(

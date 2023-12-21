@@ -47,6 +47,7 @@ android {
     }
 }
 
+
 dependencies {
 
     implementation("androidx.core:core-ktx:1.10.1")
@@ -76,5 +77,8 @@ dependencies {
     implementation("androidx.compose.runtime:runtime-livedata:1.5.4")
 
     implementation("com.google.accompanist:accompanist-permissions:0.31.1-alpha")
+
+    implementation("com.github.ozcanalasalvar.picker:datepicker:2.0.7")
+    implementation("com.github.ozcanalasalvar.picker:wheelview:2.0.7")
     
 }
